@@ -1,0 +1,50 @@
+```{r}
+
+install.packages("RJDBC")
+library(RJDBC)
+library(rJava)
+
+# Download the driver from here and upload it to the working directory
+# https://www.microsoft.com/en-us/download/details.aspx?id=11774
+
+
+untar("~/R/Projects/R-DCM/Drivers/sqljdbc_6.0.8112.200_enu.tar.gz")
+
+drv <- JDBC("com.microsoft.sqlserver.jdbc.SQLServerDriver", "/home/caiwenli/R/Projects/R-DCM/Drivers/sqljdbc_6.0/enu/jre8/sqljdbc42.jar")
+
+conn <- dbConnect(drv, 'jdbc:sqlserver://Bi.ztrac.com;databaseName=ZTracEnterpriseDataWarehouse', 'Nancy Castillo', 'Summer17')
+
+# Get table list
+
+table.list <- paste("SELECT * FROM INFORMATION_SCHEMA.TABLES", sep="")
+
+tables <- dbGetQuery(conn, table.list)
+
+tables$queryname <- paste0(tables$TABLE_SCHEMA,".",tables$TABLE_NAME)
+
+View(tables)
+
+  # To query a table you have to use the TABLE SCHEMA and the TABLE NAME
+  # I suggest to count first
+
+#DC.FDC.count.query <- paste(" SELECT count(*) 
+#                        FROM 
+#                        DoubleClick.FactDoubleClick", sep="")
+
+#DC.FDC.count <- dbGetQuery(conn, DC.FDC.count.query)
+
+#View(DC.FDC.count)
+
+  # And now query all the data! (When Stephen upgrades the server ( ͡° ͜ʖ ͡°))
+
+DC.FDC.query <- paste(" SELECT TOP 1 *
+                        FROM 
+                        Brandwatch.Rules", sep="")
+
+DC.FDC.data <- dbGetQuery(conn, DC.FDC.query)
+
+View(DC.FDC.data)
+
+
+
+```

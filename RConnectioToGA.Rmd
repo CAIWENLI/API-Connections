@@ -1,0 +1,95 @@
+---
+title: "BASIC GOOGLE ANALYTICS CONNECTION"
+author: "Nancy Castillo"
+date: "January 11, 2018"
+output: html_document
+---
+
+```{r, include=FALSE}
+
+#install.packages("devtools")
+library(devtools)
+
+#install_github("rga", "skardhamar")
+library(rga)
+
+library(devtools)
+library(curl)
+library(ggplot2)
+library(rga)
+
+
+```
+
+
+##Getting Secret
+
+```{r, include=FALSE}
+
+
+rga.open(instance="ga") # running this will open a new window where you can loggin into GA and grant access to the package. Copy and pase the secret to your Console
+
+# Run the following line instead if you had already inserted your secret
+
+
+#rga.open(instance="ga", where="~/ga.rga")
+
+```
+
+##Setting up View IDs
+
+```{r}
+
+id <- "122676987"
+```
+
+##Setting up Metrics, Dimensions, Filters and Segments
+
+Use as needed
+
+```{r}
+
+d <- "ga:channelGrouping, ga:eventAction"
+m <- "ga:uniqueEvents"
+f <- "ga:eventCategory==Application Continue Button;ga:pagePath=~apply/applicationv2"
+s <- "gaid::wLgMd63DRbSNTDOHPyGGLw" ## segment = 
+
+
+```
+
+
+```{r , include=FALSE}
+
+start <- as.Date("2017-12-01")
+finish <- as.Date("2017-12-31")
+
+
+landing.page <- ga$getData(id,
+                         start.date = start,
+                         end.date   = finish,
+                         dimensions = d,
+                         metrics    = m,
+                         filters    = f,
+                         segment    = s,
+                         batch      = TRUE, 
+                         walk       = TRUE)
+
+write.csv(landing.page, "AA_V2_final_events.csv")
+
+
+```
+
+
+##Useful URLs
+```{r}
+
+# To check dimensions and metrics
+
+browseURL("https://developers.google.com/analytics/devguides/reporting/core/dimsmets")
+
+# To check other things including filter ids
+
+browseURL("https://ga-dev-tools.appspot.com/query-explorer/")
+
+```
+

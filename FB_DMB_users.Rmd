@@ -1,0 +1,70 @@
+---
+title: "Frequency_User_Based"
+author: "Nancy Castillo"
+date: "10/09/17"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+
+start.time <- Sys.time()
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r Install packages, include=FALSE, cache=TRUE}
+
+
+library(rstudioapi)
+library(RPostgreSQL)
+library(dplyr)
+library(dbplyr)
+library(data.table)
+
+  # Create a connection to Redshift database from the dplyr package
+
+myRedshift <- src_postgres('dcmlogdata',
+                           host = "dcm.cp1kfqsgbrzl.us-east-1.redshift.amazonaws.com",
+                           port = 5439,
+                           user = "ruser", 
+                           password = "RUser2017")
+
+  # Create a table reference using the function tbl() (remote source in redshift database)
+
+activity                  <- tbl(myRedshift, "activity")
+impression                <- tbl(myRedshift, "impression")
+click                     <- tbl(myRedshift, "click")
+
+  # Virgin
+
+adv.id <- 6417308
+
+  # Campaign id for Facebook
+
+  
+start.date <- Sys.Date() - 2
+end.date   <- Sys.Date() - 1
+
+  # Users.Click tables
+
+click.fb.test <- click          %>%
+  select(userid,
+         placementid,
+         eventtime,
+         advertiserid,
+         campaignid)             %>%
+  filter( userid       !=0,
+         eventtime >= start.date,
+         eventtime < end.date) %>%
+  collapse()                              %>%
+  select(userid, 
+         placementid,
+         advertiserid, 
+         campaignid, 
+         eventtime)
+
+
+```
+
+

@@ -1,0 +1,2647 @@
+---
+title: "Frequency_User_Based"
+author: "Gerardo Nunez"
+date: "9/18/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Setup, include=FALSE, cache=TRUE}
+
+start.time <- Sys.time()
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r Install packages, include=FALSE, cache=TRUE}
+
+
+library(rstudioapi)
+library(readxl)
+library(readr)
+library(zoo)
+library(RPostgreSQL)
+library(dplyr)
+library(dbplyr)
+library(data.table)
+```
+
+```{r Connect to Amazon Redshift with RPostgreSQL, include=FALSE, cache=TRUE}
+
+  # Create a connection to Redshift database from the dplyr package
+
+myRedshift <- src_postgres('dcmlogdata',
+                           host = "dcm.cp1kfqsgbrzl.us-east-1.redshift.amazonaws.com",
+                           port = 5439,
+                           user = "ruser", 
+                           password = "RUser2017")
+
+myRedshift
+
+cecdata                  <- tbl(myRedshift, "cecdata")
+```
+
+
+Netsales
+
+
+```{r by date data, eval=F}
+
+  # Same Store Sales
+store.list <- cecdata      %>%
+  group_by(fkstoreid)      %>%
+  distinct(acctyyyy,
+           actmm,
+           weekyear) %>%
+  mutate(count = n())      %>%
+  ungroup()                %>%
+  mutate(max = max(count)) %>%
+  filter(count == max)     %>%
+  distinct(fkstoreid) %>%
+  ungroup() %>%
+  collect()
+
+
+by.date <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+  
+by.date.data <- by.date %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+first.weeks <- by.date.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+last.weeks <- by.date.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+write.csv(by.date.data, "by.date.csv")
+```
+
+```{r by item data, eval=F}
+Categoryid <- read_excel("~/R-DCM/Personal/Gerardo/CEC Deep Dive/20171109 Categoryid.xlsx")
+
+by.item <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  ungroup() %>%
+  collect()
+
+by.item.data <- by.item %>%
+  left_join(Categoryid, by = c("fkitemid" = "itemid")) %>%
+  arrange(acctyyyy,
+          weekyear)
+
+
+Categoryid %>%
+  filter(itemid==3302)
+
+Categoryid %>%
+  filter(longname=='Star Bday LE Medallion')
+
+
+Categoryid %>%
+  group_by(itemid) %>%
+  distinct(Categoryid) %>%
+  mutate(counter=n()) %>%
+  filter(counter > 1) %>%
+  arrange(desc(counter)) %>%
+  ungroup() %>%
+  distinct(itemid,
+           counter)
+
+```
+
+```{r by region data, eval=F}
+
+by.region <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           region) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(region,
+          acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+central.region <- by.region %>%
+  filter(region == 'CENTRAL')
+  
+northeast.region <- by.region %>%
+  filter(region == 'NORTHEAST')
+
+southeast.region <- by.region %>%
+  filter(region == 'SOUTHEAST')
+
+western.region <- by.region %>%
+  filter(region == 'WESTERN')
+
+
+central.region.data <- central.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+northeast.region.data <- northeast.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+southeast.region.data <- southeast.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+western.region.data <- western.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+
+central.region.data.first.weeks <- central.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+central.region.data.last.weeks <- central.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+northeast.region.data.first.weeks <- northeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+northeast.region.data.last.weeks <- northeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+southeast.region.data.first.weeks <- southeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+southeast.region.data.weeks <- southeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+western.region.data.first.weeks <- western.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+western.region.data.last.weeks <- western.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+
+write.csv(central.region.data, "central.region.data.csv")
+write.csv(northeast.region.data, "northeast.region.data.csv")
+write.csv(southeast.region.data, "southeast.region.data.csv")
+write.csv(western.region.data, "western.region.data.csv")
+
+```
+
+```{r by dates.of.business.detail, eval=F}
+
+dates.of.business <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  distinct(dateofbusiness) %>%
+  collect()
+
+dates.of.business.detail <- dates.of.business %>%
+  mutate(weekday = weekdays(dateofbusiness),
+         monthday = substr(dates.of.business$dateofbusiness, 
+                           start = 9, stop = 10),
+         quarter = substr(as.yearqtr(dates.of.business$dateofbusiness), 
+                start = 6, stop = 7))
+
+by.dates <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           dateofbusiness) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(dateofbusiness) %>%
+  ungroup() %>%
+  collect()
+
+by.dates.detailed <- by.dates %>%
+  left_join(dates.of.business.detail,
+            by = 'dateofbusiness')
+```
+
+```{r by dates (WeekDay), eval=F}
+
+by.dates.detailed %>%
+  distinct(weekday)
+
+Monday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Monday')
+
+Tuesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Tuesday')
+
+Wednesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Wednesday')
+
+Thursday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Thursday')
+
+Friday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Friday')
+
+Saturday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Saturday')
+
+Sunday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Sunday')
+
+  # Rolling Weeks
+
+Monday.dates.data <- Monday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Monday.dates)))
+
+Tuesday.dates.data <- Tuesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Tuesday.dates)))
+
+Wednesday.dates.data <- Wednesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Wednesday.dates)))
+
+Thursday.dates.data <- Thursday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Thursday.dates)))
+
+Friday.dates.data <- Friday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Friday.dates)))
+
+Saturday.dates.data <- Saturday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Saturday.dates)))
+
+Sunday.dates.data <- Sunday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Sunday.dates)))
+
+  # Table info
+
+Monday.dates.data.first.weeks <- Monday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Monday.dates.data.last.weeks <- Monday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Tuesday.dates.data.first.weeks <- Tuesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Tuesday.dates.data.last.weeks <- Tuesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Wednesday.dates.data.first.weeks <- Wednesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Wednesday.dates.data.last.weeks <- Wednesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Thursday.dates.data.first.weeks <- Thursday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Thursday.dates.data.last.weeks <- Thursday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Friday.dates.data.first.weeks <- Friday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Friday.dates.data.last.weeks <- Friday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Saturday.dates.data.first.weeks <- Saturday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Saturday.dates.data.last.weeks <- Saturday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+Sunday.dates.data.first.weeks <- Sunday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+Sunday.dates.data.last.weeks <- Sunday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+write.csv(Monday.dates.data, "Monday.dates.data.csv")
+write.csv(Tuesday.dates.data, "Tuesday.dates.data.csv")
+write.csv(Wednesday.dates.data, "Wednesday.dates.data.csv")
+write.csv(Thursday.dates.data, "Thursday.dates.data.csv")
+write.csv(Friday.dates.data, "Friday.dates.data.csv")
+write.csv(Saturday.dates.data, "Saturday.dates.data.csv")
+write.csv(Sunday.dates.data, "Sunday.dates.data.csv")
+```
+
+```{r by hour.minute, eval=F}
+
+div1.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+
+  # Rolling Weeks
+
+div1.hour.minute.data <- div1.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div1.hour.minute)))
+
+div2.hour.minute.data <- div2.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div2.hour.minute)))
+
+div3.hour.minute.data <- div3.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div3.hour.minute)))
+
+div4.hour.minute.data <- div4.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div4.hour.minute)))
+
+  # Table info
+
+div1.hour.minute.data.first.weeks <- div1.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+div1.hour.minute.data.last.weeks <- div1.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+div2.hour.minute.data.first.weeks <- div2.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+div2.hour.minute.data.last.weeks <- div2.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+div3.hour.minute.data.first.weeks <- div3.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+div3.hour.minute.data.last.weeks <- div3.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+div4.hour.minute.data.first.weeks <- div4.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales))
+
+div4.hour.minute.data.last.weeks <- div4.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales))
+
+write.csv(div1.hour.minute.data, "div1.hour.minute.data.csv")
+write.csv(div2.hour.minute.data, "div2.hour.minute.data.csv")
+write.csv(div3.hour.minute.data, "div3.hour.minute.data.csv")
+write.csv(div4.hour.minute.data, "div4.hour.minute.data.csv")
+```
+
+
+Check Number
+
+
+```{r by date data, eval=F}
+  # Same Store Sales
+store.list <- cecdata      %>%
+  group_by(fkstoreid)      %>%
+  distinct(acctyyyy,
+           actmm,
+           weekyear) %>%
+  mutate(count = n())      %>%
+  ungroup()                %>%
+  mutate(max = max(count)) %>%
+  filter(count == max)     %>%
+  distinct(fkstoreid) %>%
+  ungroup() %>%
+  collect()
+
+
+by.date <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+  
+by.date.data <- by.date %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+first.weeks <- by.date.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+last.weeks <- by.date.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+write.csv(by.date.data, "by.date_check_nmb.csv")
+```
+
+```{r by item data, eval=F}
+Categoryid <- read_excel("~/R-DCM/Personal/Gerardo/CEC Deep Dive/20171109 Categoryid.xlsx")
+
+by.item <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  ungroup() %>%
+  collect()
+
+by.item.data <- by.item %>%
+  left_join(Categoryid, by = c("fkitemid" = "itemid")) %>%
+  arrange(acctyyyy,
+          weekyear)
+
+
+Categoryid %>%
+  filter(itemid==3302)
+
+Categoryid %>%
+  filter(longname=='Star Bday LE Medallion')
+
+
+Categoryid %>%
+  group_by(itemid) %>%
+  distinct(Categoryid) %>%
+  mutate(counter=n()) %>%
+  filter(counter > 1) %>%
+  arrange(desc(counter)) %>%
+  ungroup() %>%
+  distinct(itemid,
+           counter)
+
+```
+
+```{r by region data, eval=F}
+
+by.region <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           region) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(region,
+          acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+central.region <- by.region %>%
+  filter(region == 'CENTRAL')
+  
+northeast.region <- by.region %>%
+  filter(region == 'NORTHEAST')
+
+southeast.region <- by.region %>%
+  filter(region == 'SOUTHEAST')
+
+western.region <- by.region %>%
+  filter(region == 'WESTERN')
+
+
+central.region.data <- central.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+northeast.region.data <- northeast.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+southeast.region.data <- southeast.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+western.region.data <- western.region %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+
+central.region.data.first.weeks <- central.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+central.region.data.last.weeks <- central.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+northeast.region.data.first.weeks <- northeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+northeast.region.data.last.weeks <- northeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+southeast.region.data.first.weeks <- southeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+southeast.region.data.weeks <- southeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+western.region.data.first.weeks <- western.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+western.region.data.last.weeks <- western.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+
+write.csv(central.region.data, "central.region.data_check_nmb.csv")
+write.csv(northeast.region.data, "northeast.region.data_check_nmb.csv")
+write.csv(southeast.region.data, "southeast.region.data_check_nmb.csv")
+write.csv(western.region.data, "western.region.data_check_nmb.csv")
+
+```
+
+```{r by dates.of.business.detail, eval=F}
+
+dates.of.business <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  distinct(dateofbusiness) %>%
+  collect()
+
+dates.of.business.detail <- dates.of.business %>%
+  mutate(weekday = weekdays(dateofbusiness),
+         monthday = substr(dates.of.business$dateofbusiness, 
+                           start = 9, stop = 10),
+         quarter = substr(as.yearqtr(dates.of.business$dateofbusiness), 
+                start = 6, stop = 7))
+
+by.dates <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           dateofbusiness) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(dateofbusiness) %>%
+  ungroup() %>%
+  collect()
+
+by.dates.detailed <- by.dates %>%
+  left_join(dates.of.business.detail,
+            by = 'dateofbusiness')
+```
+
+```{r by dates (WeekDay), eval=F}
+
+by.dates.detailed %>%
+  distinct(weekday)
+
+Monday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Monday')
+
+Tuesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Tuesday')
+
+Wednesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Wednesday')
+
+Thursday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Thursday')
+
+Friday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Friday')
+
+Saturday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Saturday')
+
+Sunday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Sunday')
+
+  # Rolling Weeks
+
+Monday.dates.data <- Monday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Monday.dates)))
+
+Tuesday.dates.data <- Tuesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Tuesday.dates)))
+
+Wednesday.dates.data <- Wednesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Wednesday.dates)))
+
+Thursday.dates.data <- Thursday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Thursday.dates)))
+
+Friday.dates.data <- Friday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Friday.dates)))
+
+Saturday.dates.data <- Saturday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Saturday.dates)))
+
+Sunday.dates.data <- Sunday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Sunday.dates)))
+
+  # Table info
+
+Monday.dates.data.first.weeks <- Monday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Monday.dates.data.last.weeks <- Monday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Tuesday.dates.data.first.weeks <- Tuesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Tuesday.dates.data.last.weeks <- Tuesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Wednesday.dates.data.first.weeks <- Wednesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Wednesday.dates.data.last.weeks <- Wednesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Thursday.dates.data.first.weeks <- Thursday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Thursday.dates.data.last.weeks <- Thursday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Friday.dates.data.first.weeks <- Friday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Friday.dates.data.last.weeks <- Friday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Saturday.dates.data.first.weeks <- Saturday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Saturday.dates.data.last.weeks <- Saturday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+Sunday.dates.data.first.weeks <- Sunday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+Sunday.dates.data.last.weeks <- Sunday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+write.csv(Monday.dates.data, "Monday.dates.data_check_nmb.csv")
+write.csv(Tuesday.dates.data, "Tuesday.dates.data_check_nmb.csv")
+write.csv(Wednesday.dates.data, "Wednesday.dates.data_check_nmb.csv")
+write.csv(Thursday.dates.data, "Thursday.dates.data_check_nmb.csv")
+write.csv(Friday.dates.data, "Friday.dates.data_check_nmb.csv")
+write.csv(Saturday.dates.data, "Saturday.dates.data_check_nmb.csv")
+write.csv(Sunday.dates.data, "Sunday.dates.data_check_nmb.csv")
+```
+
+```{r by hour.minute, eval=F}
+
+div1.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+
+  # Rolling Weeks
+
+div1.hour.minute.data <- div1.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div1.hour.minute)))
+
+div2.hour.minute.data <- div2.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div2.hour.minute)))
+
+div3.hour.minute.data <- div3.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div3.hour.minute)))
+
+div4.hour.minute.data <- div4.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div4.hour.minute)))
+
+  # Table info
+
+div1.hour.minute.data.first.weeks <- div1.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+div1.hour.minute.data.last.weeks <- div1.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+div2.hour.minute.data.first.weeks <- div2.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+div2.hour.minute.data.last.weeks <- div2.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+div3.hour.minute.data.first.weeks <- div3.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+div3.hour.minute.data.last.weeks <- div3.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+div4.hour.minute.data.first.weeks <- div4.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(nmb.trans))
+
+div4.hour.minute.data.last.weeks <- div4.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(nmb.trans))
+
+write.csv(div1.hour.minute.data, "div1.hour.minute.data_check_nmb.csv")
+write.csv(div2.hour.minute.data, "div2.hour.minute.data_check_nmb.csv")
+write.csv(div3.hour.minute.data, "div3.hour.minute.data_check_nmb.csv")
+write.csv(div4.hour.minute.data, "div4.hour.minute.data_check_nmb.csv")
+```
+
+
+Average Check
+
+
+```{r by date data, eval=F}
+  # Same Store Sales
+store.list <- cecdata      %>%
+  group_by(fkstoreid)      %>%
+  distinct(acctyyyy,
+           actmm,
+           weekyear) %>%
+  mutate(count = n())      %>%
+  ungroup()                %>%
+  mutate(max = max(count)) %>%
+  filter(count == max)     %>%
+  distinct(fkstoreid) %>%
+  ungroup() %>%
+  collect()
+
+
+by.date <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+  
+by.date.data <- by.date %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>%
+  mutate(index.number  = as.numeric(rownames(by.date)))
+
+first.weeks <- by.date.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+last.weeks <- by.date.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+write.csv(by.date.data, "by.date_avg_check.csv")
+```
+
+```{r by item data, eval=F}
+Categoryid <- read_excel("~/R-DCM/Personal/Gerardo/CEC Deep Dive/20171109 Categoryid.xlsx")
+
+by.item <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  ungroup() %>%
+  collect()
+
+by.item.data <- by.item %>%
+  left_join(Categoryid, by = c("fkitemid" = "itemid")) %>%
+  arrange(acctyyyy,
+          weekyear)
+
+
+Categoryid %>%
+  filter(itemid==3302)
+
+Categoryid %>%
+  filter(longname=='Star Bday LE Medallion')
+
+
+Categoryid %>%
+  group_by(itemid) %>%
+  distinct(Categoryid) %>%
+  mutate(counter=n()) %>%
+  filter(counter > 1) %>%
+  arrange(desc(counter)) %>%
+  ungroup() %>%
+  distinct(itemid,
+           counter)
+
+```
+
+```{r by region data, eval=F}
+
+by.region <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           region) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(region,
+          acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+central.region <- by.region %>%
+  filter(region == 'CENTRAL')
+  
+northeast.region <- by.region %>%
+  filter(region == 'NORTHEAST')
+
+southeast.region <- by.region %>%
+  filter(region == 'SOUTHEAST')
+
+western.region <- by.region %>%
+  filter(region == 'WESTERN')
+
+
+central.region.data <- central.region %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+northeast.region.data <- northeast.region %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+southeast.region.data <- southeast.region %>%
+  ungroup() %>%
+ mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+western.region.data <- western.region %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+
+central.region.data.first.weeks <- central.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+central.region.data.last.weeks <- central.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+northeast.region.data.first.weeks <- northeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+northeast.region.data.last.weeks <- northeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+southeast.region.data.first.weeks <- southeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+southeast.region.data.weeks <- southeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+western.region.data.first.weeks <- western.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+western.region.data.last.weeks <- western.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+
+write.csv(central.region.data, "central.region.data_avg_check.csv")
+write.csv(northeast.region.data, "northeast.region.data_avg_check.csv")
+write.csv(southeast.region.data, "southeast.region.data_avg_check.csv")
+write.csv(western.region.data, "western.region.data_avg_check.csv")
+
+```
+
+```{r by dates.of.business.detail, eval=F}
+
+dates.of.business <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  distinct(dateofbusiness) %>%
+  collect()
+
+dates.of.business.detail <- dates.of.business %>%
+  mutate(weekday = weekdays(dateofbusiness),
+         monthday = substr(dates.of.business$dateofbusiness, 
+                           start = 9, stop = 10),
+         quarter = substr(as.yearqtr(dates.of.business$dateofbusiness), 
+                start = 6, stop = 7))
+
+by.dates <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           dateofbusiness) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(dateofbusiness) %>%
+  ungroup() 
+#%>%
+  collect()
+
+show_query(by.dates)
+
+by.dates.detailed <- by.dates %>%
+  left_join(dates.of.business.detail,
+            by = 'dateofbusiness')
+```
+
+```{r by dates (WeekDay), eval=F}
+
+by.dates.detailed %>%
+  distinct(weekday)
+
+Monday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Monday')
+
+Tuesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Tuesday')
+
+Wednesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Wednesday')
+
+Thursday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Thursday')
+
+Friday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Friday')
+
+Saturday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Saturday')
+
+Sunday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Sunday')
+
+  # Rolling Weeks
+
+Monday.dates.data <- Monday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Monday.dates)))
+
+Tuesday.dates.data <- Tuesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Tuesday.dates)))
+
+Wednesday.dates.data <- Wednesday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Wednesday.dates)))
+
+Thursday.dates.data <- Thursday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Thursday.dates)))
+
+Friday.dates.data <- Friday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Friday.dates)))
+
+Saturday.dates.data <- Saturday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Saturday.dates)))
+
+Sunday.dates.data <- Sunday.dates %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(Sunday.dates)))
+
+  # Table info
+
+Monday.dates.data.first.weeks <- Monday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Monday.dates.data.last.weeks <- Monday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Tuesday.dates.data.first.weeks <- Tuesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Tuesday.dates.data.last.weeks <- Tuesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Wednesday.dates.data.first.weeks <- Wednesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Wednesday.dates.data.last.weeks <- Wednesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Thursday.dates.data.first.weeks <- Thursday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Thursday.dates.data.last.weeks <- Thursday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Friday.dates.data.first.weeks <- Friday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Friday.dates.data.last.weeks <- Friday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Saturday.dates.data.first.weeks <- Saturday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Saturday.dates.data.last.weeks <- Saturday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Sunday.dates.data.first.weeks <- Sunday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+Sunday.dates.data.last.weeks <- Sunday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+write.csv(Monday.dates.data, "Monday.dates.data_avg_check.csv")
+write.csv(Tuesday.dates.data, "Tuesday.dates.data_avg_check.csv")
+write.csv(Wednesday.dates.data, "Wednesday.dates.data_avg_check.csv")
+write.csv(Thursday.dates.data, "Thursday.dates.data_avg_check.csv")
+write.csv(Friday.dates.data, "Friday.dates.data_avg_check.csv")
+write.csv(Saturday.dates.data, "Saturday.dates.data_avg_check.csv")
+write.csv(Sunday.dates.data, "Sunday.dates.data_avg_check.csv")
+```
+
+```{r by hour.minute, eval=F}
+
+div1.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22) %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  summarise(nmb.trans = n_distinct(unique.check),
+            sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear) %>%
+  ungroup() %>%
+  collect()
+
+
+  # Rolling Weeks
+
+div1.hour.minute.data <- div1.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(div1.hour.minute)))
+
+div2.hour.minute.data <- div2.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(div2.hour.minute)))
+
+div3.hour.minute.data <- div3.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(div3.hour.minute)))
+
+div4.hour.minute.data <- div4.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.sales = rollsum(x=sum.sales, 52, align = "right", fill = NA),
+         rollsum.trans = rollsum(x=nmb.trans, 52, align = "right", fill = NA)) %>%
+  mutate(weighted.avg  = rollsum.sales/rollsum.trans) %>% 
+  mutate(index.number = as.numeric(rownames(div4.hour.minute)))
+
+  # Table info
+
+div1.hour.minute.data.first.weeks <- div1.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div1.hour.minute.data.last.weeks <- div1.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div2.hour.minute.data.first.weeks <- div2.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div2.hour.minute.data.last.weeks <- div2.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div3.hour.minute.data.first.weeks <- div3.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div3.hour.minute.data.last.weeks <- div3.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div4.hour.minute.data.first.weeks <- div4.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = sum(sum.sales)/sum(nmb.trans))
+
+div4.hour.minute.data.last.weeks <- div4.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = sum(sum.sales)/sum(nmb.trans))
+
+write.csv(div1.hour.minute.data, "div1.hour.minute.data_avg_check.csv")
+write.csv(div2.hour.minute.data, "div2.hour.minute.data_avg_check.csv")
+write.csv(div3.hour.minute.data, "div3.hour.minute.data_avg_check.csv")
+write.csv(div4.hour.minute.data, "div4.hour.minute.data_avg_check.csv")
+```
+
+ 
+Transactions per Check / Average Item Price
+
+
+```{r by date data, eval=F}
+
+  # Same Store Sales
+store.list <- cecdata      %>%
+  group_by(fkstoreid)      %>%
+  distinct(acctyyyy,
+           actmm,
+           weekyear) %>%
+  mutate(count = n())      %>%
+  ungroup()                %>%
+  mutate(max = max(count)) %>%
+  filter(count == max)     %>%
+  distinct(fkstoreid) %>%
+  ungroup() %>%
+  collect()
+
+by.date <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+  
+by.date.data <- by.date %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(by.date)))
+
+
+first.weeks <- by.date.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sales.first.weeks = mean(avg.trans.in.chk))
+
+last.weeks <- by.date.data %>%
+  filter(index.number>=201) %>%
+  summarise(sales.last.weeks = mean(avg.trans.in.chk))
+
+write.csv(by.date.data, "by.date_tr.chk_it.pri.csv")
+
+by.date3 <- cecdata %>%
+  filter(acctyyyy==2013) %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+    group_by(item.price.per.chk) %>%
+    summarise(n()) %>%
+#count()
+    collect()
+    
+by.date2 <- by.date2 %>%
+  arrange(trans.in.chk)
+
+
+    #summarise(mean = mean(trans.in.chk),
+    #          med = median(trans.in.chk))
+  
+  
+#mean 8
+#med 2
+```
+
+```{r by item data, eval=F}
+Categoryid <- read_excel("~/R-DCM/Personal/Gerardo/CEC Deep Dive/20171109 Categoryid.xlsx")
+
+by.item <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  ungroup() %>%
+  collect()
+
+by.item.data <- by.item %>%
+  left_join(Categoryid, by = c("fkitemid" = "itemid")) %>%
+  arrange(acctyyyy,
+          weekyear)
+
+
+Categoryid %>%
+  filter(itemid==3302)
+
+Categoryid %>%
+  filter(longname=='Star Bday LE Medallion')
+
+
+Categoryid %>%
+  group_by(itemid) %>%
+  distinct(Categoryid) %>%
+  mutate(counter=n()) %>%
+  filter(counter > 1) %>%
+  arrange(desc(counter)) %>%
+  ungroup() %>%
+  distinct(itemid,
+           counter)
+
+```
+
+```{r by region data, eval=F}
+
+by.region <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           region,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(region,
+           acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+central.region <- by.region %>%
+  filter(region == 'CENTRAL')
+  
+northeast.region <- by.region %>%
+  filter(region == 'NORTHEAST')
+
+southeast.region <- by.region %>%
+  filter(region == 'SOUTHEAST')
+
+western.region <- by.region %>%
+  filter(region == 'WESTERN')
+
+
+central.region.data <- central.region %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(central.region)))
+
+
+northeast.region.data <- northeast.region %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(northeast.region)))
+
+southeast.region.data <- southeast.region %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(southeast.region)))
+
+western.region.data <- western.region %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(western.region)))
+
+central.region.data.first.weeks <- central.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+central.region.data.last.weeks <- central.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+northeast.region.data.first.weeks <- northeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+northeast.region.data.last.weeks <- northeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+southeast.region.data.first.weeks <- southeast.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+southeast.region.data.weeks <- southeast.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+western.region.data.first.weeks <- western.region.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+western.region.data.last.weeks <- western.region.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+
+write.csv(central.region.data, "central.region.data.csv")
+write.csv(northeast.region.data, "northeast.region.data.csv")
+write.csv(southeast.region.data, "southeast.region.data.csv")
+write.csv(western.region.data, "western.region.data.csv")
+
+```
+
+```{r by dates.of.business.detail, eval=F}
+
+dates.of.business <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  distinct(dateofbusiness) %>%
+  collect()
+
+dates.of.business.detail <- dates.of.business %>%
+  mutate(weekday = weekdays(dateofbusiness),
+         monthday = substr(dates.of.business$dateofbusiness, 
+                           start = 9, stop = 10),
+         quarter = substr(as.yearqtr(dates.of.business$dateofbusiness), 
+                start = 6, stop = 7))
+
+by.dates <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           dateofbusiness,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  ungroup() %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  collect()
+
+by.dates.detailed <- by.dates %>%
+  left_join(dates.of.business.detail,
+            by = 'dateofbusiness')
+```
+
+```{r by dates (WeekDay), eval=F}
+
+by.dates.detailed %>%
+  distinct(weekday)
+
+Monday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Monday')
+
+Tuesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Tuesday')
+
+Wednesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Wednesday')
+
+Thursday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Thursday')
+
+Friday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Friday')
+
+Saturday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Saturday')
+
+Sunday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Sunday')
+
+  # Rolling Weeks
+
+Monday.dates.data <- Monday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Monday.dates)))
+
+Tuesday.dates.data <- Tuesday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Tuesday.dates)))
+
+Wednesday.dates.data <- Wednesday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Wednesday.dates)))
+
+Thursday.dates.data <- Thursday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Thursday.dates)))
+
+Friday.dates.data <- Friday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Friday.dates)))
+
+Saturday.dates.data <- Saturday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Saturday.dates)))
+
+Sunday.dates.data <- Sunday.dates %>%
+  ungroup() %>%
+  mutate(rollmean.it.chk.num = rollmean(x=avg.trans.in.chk, 52, align = "right", fill = NA),
+         rollmean.it.chk.pric = rollmean(x=avg.item.price.per.chk, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(Sunday.dates)))
+
+  # Table info
+
+Monday.dates.data.first.weeks <- Monday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Monday.dates.data.last.weeks <- Monday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Tuesday.dates.data.first.weeks <- Tuesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Tuesday.dates.data.last.weeks <- Tuesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Wednesday.dates.data.first.weeks <- Wednesday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Wednesday.dates.data.last.weeks <- Wednesday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Thursday.dates.data.first.weeks <- Thursday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Thursday.dates.data.last.weeks <- Thursday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Friday.dates.data.first.weeks <- Friday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Friday.dates.data.last.weeks <- Friday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Saturday.dates.data.first.weeks <- Saturday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Saturday.dates.data.last.weeks <- Saturday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Sunday.dates.data.first.weeks <- Sunday.dates.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+Sunday.dates.data.last.weeks <- Sunday.dates.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+write.csv(Monday.dates.data, "Monday.dates.data.csv")
+write.csv(Tuesday.dates.data, "Tuesday.dates.data.csv")
+write.csv(Wednesday.dates.data, "Wednesday.dates.data.csv")
+write.csv(Thursday.dates.data, "Thursday.dates.data.csv")
+write.csv(Friday.dates.data, "Friday.dates.data.csv")
+write.csv(Saturday.dates.data, "Saturday.dates.data.csv")
+write.csv(Sunday.dates.data, "Sunday.dates.data.csv")
+```
+
+```{r by hour.minute, eval=F}
+
+div1.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22) %>%
+  mutate(unique.check = sql("checknumber || fkstoreid || dateofbusiness")) %>%
+  group_by(acctyyyy,
+           weekyear,
+           unique.check) %>%
+  summarise(trans.in.chk = n(),
+            item.price.per.chk = mean(price)) %>%
+  ungroup() %>%
+  group_by(acctyyyy,
+           weekyear) %>%
+  summarise(avg.trans.in.chk = mean(trans.in.chk),
+            avg.item.price.per.chk = mean(item.price.per.chk)) %>%
+  arrange(acctyyyy,
+          weekyear) %>%
+  ungroup() %>%
+  collect()
+
+
+  # Rolling Weeks
+
+div1.hour.minute.data <- div1.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div1.hour.minute)))
+
+div2.hour.minute.data <- div2.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div2.hour.minute)))
+
+div3.hour.minute.data <- div3.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div3.hour.minute)))
+
+div4.hour.minute.data <- div4.hour.minute %>%
+  ungroup() %>%
+  mutate(rollsum.cec = rollsum(x=sum.sales, 52, align = "right", fill = NA)) %>%
+  mutate(index.number = as.numeric(rownames(div4.hour.minute)))
+
+  # Table info
+
+div1.hour.minute.data.first.weeks <- div1.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div1.hour.minute.data.last.weeks <- div1.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div2.hour.minute.data.first.weeks <- div2.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div2.hour.minute.data.last.weeks <- div2.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div3.hour.minute.data.first.weeks <- div3.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div3.hour.minute.data.last.weeks <- div3.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div4.hour.minute.data.first.weeks <- div4.hour.minute.data %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+div4.hour.minute.data.last.weeks <- div4.hour.minute.data %>%
+  filter(index.number>=201) %>%
+  summarise(avg.trans.first.weeks = mean(avg.trans.in.chk),
+            avg.price.first.weeks = mean(avg.item.price.per.chk))
+
+write.csv(div1.hour.minute.data, "div1.hour.minute.data.csv")
+write.csv(div2.hour.minute.data, "div2.hour.minute.data.csv")
+write.csv(div3.hour.minute.data, "div3.hour.minute.data.csv")
+write.csv(div4.hour.minute.data, "div4.hour.minute.data.csv")
+```
+
+
+Week/Hour Netsales
+
+
+```{r by hour.minute, eval=F}
+
+
+cecdata2 <- cecdata %>%
+  mutate(weekday = sql("to_char(dateofbusiness, 'day')"))
+
+div1.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+          weekyear,
+          weekday) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear,
+           weekday) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear,
+           weekday) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+           weekyear,
+           weekday) %>%
+  ungroup() %>%
+  collect()
+
+div6.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour<10) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+          weekyear,
+          weekday) %>%
+  ungroup() %>%
+  collect()
+
+div7.hour.minute <- cecdata2 %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>22) %>%
+  group_by(acctyyyy,
+           weekyear,
+           weekday) %>%
+  summarise(sum.sales = sum(netsales)) %>%
+  arrange(acctyyyy,
+          weekyear,
+          weekday) %>%
+  ungroup() %>%
+  collect()
+
+
+write.csv(div1.hour.minute, "div1.hour.minute_Cross.csv")
+write.csv(div2.hour.minute, "div2.hour.minute_Cross.csv")
+write.csv(div3.hour.minute, "div3.hour.minute_Cross.csv")
+write.csv(div4.hour.minute, "div4.hour.minute_Cross.csv")
+write.csv(div6.hour.minute, "div6.hour.minute_Cross.csv")
+write.csv(div7.hour.minute, "div7.hour.minute_Cross.csv")
+```
+
+
+Product Units
+
+
+```{r Product Dictionary}
+Dictionary <- read_excel("~/R-DCM/Personal/Gerardo/CEC Deep Dive/food items with category.xlsx")
+
+Eraser <- Dictionary %>%
+  filter(itemid==8101|
+         itemid==9991|
+         itemid==9992)
+
+Dictionary2 <- anti_join(Dictionary,
+          Eraser, by="itemid") %>%
+  rename("fkitemid" = "itemid")
+
+Dictionary3 <- Dictionary2[,c(1,3:4)]
+
+Dictionary3$name[Dictionary3$Fkcategoryid==1|
+                 Dictionary3$Fkcategoryid==2] <- "Food" 
+Dictionary3$name[Dictionary3$Fkcategoryid==7|
+                 Dictionary3$Fkcategoryid==11] <- "Merch" 
+Dictionary3$name[Dictionary3$Fkcategoryid==3] <- "Alcohol" 
+Dictionary3$name[Dictionary3$Fkcategoryid==9|
+                 Dictionary3$Fkcategoryid==5|
+                 Dictionary3$Fkcategoryid==4|
+                 Dictionary3$Fkcategoryid==6] <- "Games" 
+Dictionary3$name[Dictionary3$Fkcategoryid==23] <- "Misc" 
+
+Food <- Dictionary3$fkitemid[Dictionary3$name=='Food']
+Merch <- Dictionary3$fkitemid[Dictionary3$name=='Merch']
+Alcohol <- Dictionary3$fkitemid[Dictionary3$name=='Alcohol']
+Games <- Dictionary3$fkitemid[Dictionary3$name=='Games']
+Misc <- Dictionary3$fkitemid[Dictionary3$name=='Misc']
+
+Dictionary2 %>%
+  distinct(name,
+           Fkcategoryid) %>%
+  arrange(Fkcategoryid)
+
+```
+
+```{r by date data, eval=F}
+by.date <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(acctyyyy,
+          weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+Games.by.date <- by.date %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+
+```
+
+```{r by region data, eval=F}
+
+by.region <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           region,
+          fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(region,
+          acctyyyy,
+          weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+central.region <- by.region %>%
+  filter(region == 'CENTRAL')
+  
+northeast.region <- by.region %>%
+  filter(region == 'NORTHEAST')
+
+southeast.region <- by.region %>%
+  filter(region == 'SOUTHEAST')
+
+western.region <- by.region %>%
+  filter(region == 'WESTERN')
+
+# 'CENTRAL'
+Games.by.date <- central.region %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'NORTHEAST'
+Games.by.date <- northeast.region %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'SOUTHEAST'
+Games.by.date <- southeast.region %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'WESTERN'
+Games.by.date <- western.region %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+first.weeks
+last.weeks
+```
+
+```{r by dates.of.business.detail, eval=F}
+
+dates.of.business <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  distinct(dateofbusiness) %>%
+  collect()
+
+dates.of.business.detail <- dates.of.business %>%
+  mutate(weekday = weekdays(dateofbusiness),
+         monthday = substr(dates.of.business$dateofbusiness, 
+                           start = 9, stop = 10),
+         quarter = substr(as.yearqtr(dates.of.business$dateofbusiness), 
+                start = 6, stop = 7))
+
+by.dates <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           dateofbusiness,
+          fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(dateofbusiness) %>%
+  ungroup() %>%
+  collect()
+
+by.dates.detailed <- by.dates %>%
+  left_join(dates.of.business.detail,
+            by = 'dateofbusiness')
+```
+
+```{r by dates (WeekDay), eval=F}
+
+Monday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Monday')
+
+Tuesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Tuesday')
+
+Wednesday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Wednesday')
+
+Thursday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Thursday')
+
+Friday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Friday')
+
+Saturday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Saturday')
+
+Sunday.dates <- by.dates.detailed %>%
+  filter(weekday == 'Sunday')
+
+  # Table info
+
+# 'Monday'
+Games.by.date <- Monday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Tuesday'
+Games.by.date <- Tuesday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Wednesday'
+Games.by.date <- Wednesday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Thursday'
+Games.by.date <- Thursday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Friday'
+Games.by.date <- Friday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Saturday'
+Games.by.date <- Saturday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# 'Sunday'
+Games.by.date <- Sunday.dates %>%
+  filter(fkitemid %in% Games)
+
+first.weeks <- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+
+first.weeks
+last.weeks
+```
+
+```{r by hour.minute, eval=F}
+
+div1.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=10,
+         hour<=12) %>%
+  group_by(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+div2.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=13,
+         hour<=16) %>%
+  group_by(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+div3.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=17,
+         hour<=19) %>%
+  group_by(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+div4.hour.minute <- cecdata %>%
+  filter(fkstoreid %in% store.list$fkstoreid) %>%
+  filter(hour>=20,
+         hour<=22,
+          fkitemid) %>%
+  group_by(acctyyyy,
+           weekyear,
+           fkitemid) %>%
+  summarise(sum.qty = sum(qty)) %>%
+  arrange(acctyyyy,
+           weekyear,
+          fkitemid) %>%
+  ungroup() %>%
+  collect()
+
+
+  # Table info
+
+# Div1
+
+Games.by.date <- div1.hour.minute %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# Div2
+
+Games.by.date <- div2.hour.minute %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# Div3
+
+Games.by.date <- div3.hour.minute %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+# Div4
+
+Games.by.date <- div4.hour.minute %>%
+  filter(fkitemid %in% Games)
+
+first.weeks<- Games.by.date %>%
+  filter(acctyyyy == 2013) %>%
+  summarise(sum(sum.qty))
+
+last.week16 <- Games.by.date %>%
+  filter(acctyyyy == 2016,
+         weekyear>=44) %>%
+  summarise(sum(sum.qty))
+
+last.week17 <- Games.by.date %>%
+  filter(acctyyyy == 2017) %>%
+  summarise(sum(sum.qty))
+
+last.weeks <- last.week17
+last.weeks$`sum(sum.qty)` <- last.week16$`sum(sum.qty)` + last.week17$`sum(sum.qty)`
+
+first.weeks
+last.weeks
+
+```

@@ -1,0 +1,42 @@
+---
+title: "GA Scripts"
+author: "Doris"
+date: "12/8/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(devtools)
+library(curl)
+library(rga)
+rga.open(instance = "ga")
+library(dplyr)
+
+
+CEC <-"392732"
+CEC_Channel_Coupon_GEO <- ga$getData(CEC,
+                                 start.date = as.Date("2016-01-01"), 
+                                 end.date   = as.Date("2017-12-07"),
+                                 metrics    = "ga:sessions, ga:goal7Completions",
+                                 dimensions = "ga:date, ga:country, ga:region, ga:channelGrouping",
+                                 batch      = TRUE, 
+                                 walk       = TRUE)
+
+```
+
+```{r}
+CEC_US <- filter(CEC_Channel_Coupon_GEO, country == "United States")
+
+CEC_US <- filter(CEC_US, region != "(not set)")
+
+CEC_US_1 <- filter(CEC_US, date <= "2016-10-31")
+
+CEC_US_2 <- filter(CEC_US, date >= "2017-01-01")
+
+CEC_US <- rbind(CEC_US_1, CEC_US_2)
+
+write.csv(CEC_US,"CEC_US.csv", row.names = FALSE)
+
+```
+

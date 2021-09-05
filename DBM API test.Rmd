@@ -1,0 +1,36 @@
+---
+title: "DBM API test"
+author: "Marianne Rochet"
+date: "2/1/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r Load packages}
+
+require(httr)
+
+
+client_id <- "1041281374043-tlgshvl9itv0v2mtf470m89oa7mvo1km.apps.googleusercontent.com"
+client_secret <- "DqKXu-VQXBR3zKRtNo74Z7S8"
+
+
+# 1. Find OAuth settings for google:
+#    https://developers.google.com/accounts/docs/OAuth2InstalledApp
+oauth_endpoints("google")
+
+# 2. Register an application at https://cloud.google.com/console#/project
+#    Replace key and secret below.
+myapp <- oauth_app("DBM API Access",
+  key = client_id,
+  secret = client_secret)
+
+google_token <- oauth2.0_token(oauth_endpoints("google"), myapp,
+  scope = "https://www.googleapis.com/auth/doubleclickbidmanager")
+
+```

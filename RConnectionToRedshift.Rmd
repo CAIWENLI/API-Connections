@@ -1,0 +1,239 @@
+---
+title: "Connecting RStudio to Amazon Redshift"
+author: "Marianne Rochet"
+date: "6/12/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Protect Amazon Redshift credentials in shared scripts
+
+A password is required to create the database connection, however typing plain text passwords into R scripts is not recommended. 
+You can securely retrieve your password using rstudioapi::askForPassword function.
+
+```{r Install and load rstudioapi package}
+
+#install.packages("rstudioapi")
+library(rstudioapi)
+
+```
+
+## Two packages available to connect RStudio to Amazon Redshift: RJDBC or RPostgreSQL
+
+See AWS documentation for details: https://aws.amazon.com/blogs/big-data/connecting-r-with-amazon-redshift/
+
+The recommended connection method is using a client application or tool that executes SQL statements through the PostgreSQL ODBC or JDBC drivers. Two packages are available in R:
+
+1. RJDBC Package
+
+2. RPostgeSQL Package / dyplyr package
+
+
+
+### Connection to Amazon Redshift with RJDBC
+
+You can install the RJDBC package to load the JDBC driver and send SQL queries to Amazon Redshift. This requires a matching JDBC driver. Choose the latest JDBC driver provided by AWS (Configure a JDBC Connection: http://docs.aws.amazon.com/redshift/latest/mgmt/configure-jdbc-connection.html).
+
+This driver is based on the PostgreSQL JDBC driver but optimized for performance and memory management.
+
+The RJDBC package provides you with the most flexibility and the best performance. You should use this package for all your SQL queries to Amazon Redshift. You will have to implement everything by using SQL commands. 
+
+RJDB package documentation: https://cran.r-project.org/web/packages/RJDBC/RJDBC.pdf
+
+
+```{r Connection to Amazon Redshift with RJDBC}
+
+#install.packages("RJDBC", dep=TRUE) 
+library(RJDBC)
+
+# Download Amazon Redshift JDBC driver - Run only once
+#download.file('http://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC42-1.2.1.1001.jar','RedshiftJDBC42-1.2.1.1001.jar')
+
+# Connect to Amazon Redshift
+
+driver <- JDBC("com.amazon.redshift.jdbc42.Driver", "RedshiftJDBC42-1.2.1.1001.jar")
+
+conn <- dbConnect(driver, paste0("jdbc:redshift://dcm.cp1kfqsgbrzl.us-east-1.redshift.amazonaws.com:5439/dcmlogdata?user=ruser&password=",rstudioapi::askForPassword("Please enter Amazon Redshift Password:")))
+
+```
+
+```{r Generating queries with RJDBC}
+
+# List all tables
+dbListTables(conn)
+
+# List all fields in a table
+dbListFields(conn, "impression")
+dbListFields(conn, "state")
+
+# Read a table --- Not recommended for large data table
+dbReadTable(conn, "state")
+
+# Executing simple queries
+dbGetQuery(conn, "select count(*) from advertiser")
+dbGetQuery(conn, "select top 10 * from state")
+dbGetQuery(conn, "select * from state where left(stateregion,2) = 'US'")
+dbGetQuery(conn, "select stateregionfullname, count(*) from state where left(stateregion,2) = 'US' group by stateregionfullname")
+
+# Import query results in a dataframe
+ImpCount <- dbGetQuery(conn, "select advertiserid, campaignid, count(*) as nbImp from impression where trunc(eventtime)='2017-06-12' group by advertiserid, campaignid")
+
+# This closes the connection, discards all pending work, and frees resources (e.g., memory, sockets).
+dbDisconnect(conn)
+
+```
+
+### Connection to PostgreSQL database from the dplyr package 
+
+Packages such as RPostgeSQL do not use the optimized Amazon Redshift JDBC driver and in some special cases, such as running SQL queries on big tables, you will see some performance reduction. 
+
+But PostgeSQL connection allows you to use the dplyr package, a fast and consistent R package for working with data frames like objects, both in memory or on databases. This avoids having to copy all data into your R session, and allows you to load as much of your workload as possible directly on Amazon Redshift. 
+
+One other advantage of dplyr is that it will automatically generate SQL for you so that you don't have to use SQL commands. 
+
+More details here: http://dbplyr.tidyverse.org/articles/dbplyr.html
+
+#### Connection to Amazon Redshift with RPostgreSQL
+
+```{r Connection to Amazon Redshift with RPostgreSQL}
+
+#install.packages("RPostgreSQL")
+#install.packages("dplyr")
+
+library(RPostgreSQL)
+library(dplyr)
+library(dbplyr)
+
+# Create a connection to Redshift database from the dplyr package
+myRedshift <- src_postgres('dcmlogdata',
+host = "dcm.cp1kfqsgbrzl.us-east-1.redshift.amazonaws.com",
+port = 5439,
+user = "ruser", 
+password = rstudioapi::askForPassword("Please enter Amazon Redshift Password:"))
+
+```
+
+#### Create reference to tables and analyze data structure
+
+Create a table reference using the function tbl() (remote source in redshift database). This means you are creating an R object which points to the table in the Amazon Redshift cluster, but data is not loaded to R memory. As soon as you execute R functions to this R object, SQL queries are executed in the background. Only the results are copied to your R session.
+
+```{r Create reference to tables and analyze data structure}
+
+# List all tbls provided by a source.
+src_tbls(myRedshift)
+
+# Create a table reference using the function tbl() (remote source in redshift database)
+state <- tbl(myRedshift,"state")
+advertiser <- tbl(myRedshift,"advertiser")
+impression <- tbl(myRedshift,"impression")
+creative <- tbl(myRedshift,"creatives")
+placement <- tbl(myRedshift,"placement")
+
+# Default R commands analyzing data structure
+dim(state)
+colnames(state)
+head(state)
+head(placement,30)
+
+# Create dataframe from a table --- Not recommended for large data table
+df_advertiser <- as.data.frame(advertiser)
+
+```
+
+dplyr is a grammar of data manipulation, providing a consistent set of verbs that help you solve the most common data manipulation challenges:
+- mutate() adds new variables that are functions of existing variables
+- select() picks variables based on their names.
+- filter() picks cases based on their values.
+- summarise() reduces multiple values down to a single summary.
+- arrange() changes the ordering of the rows.
+
+See documentation: https://cran.r-project.org/web/packages/dplyr/dplyr.pdf and http://dplyr.tidyverse.org/index.html
+
+```{r Operations and data transformation using the dplyr package}
+
+#List variables provided by a tbl.
+tbl_vars(impression)
+head(creative,100)
+
+#Filter/count rows
+NbImp <- impression %>% 
+  summarise(n())
+
+AdvA_Imp <- impression %>%
+filter(advertiserid==6260246) %>%
+head()
+
+```
+
+The most important difference between ordinary data frames and remote database queries is that your R code is translated into SQL and executed in the database, not in R. When working with databases, dplyr tries to be as lazy as possible:
+- It never pulls data into R unless you explicitly ask for it.
+- It delays doing any work until the last possible moment: it collects together everything you want to do and then sends it to the database in one step.
+
+The sequence of operations never touches the database until you ask for the data (e.g. by printing value or create dataframe) that dplyr generates the SQL and requests the results from the database. 
+
+```{r Collect data}
+
+# Write sequence of operations
+AdvA_Count <- impression %>%
+filter(advertiserid==6259428,campaignid==10745204,between(eventtime, "2017-06-05", "2017-06-07")) %>%
+summarise(n()) 
+
+impression %>%
+filter(advertiserid==6259428,campaignid==10745204,between(eventtime, "2017-06-05", "2017-06-07")) %>%
+head()
+
+AdvA_LastWeek <- impression %>%
+filter(advertiserid==6259428,between(eventtime, "2017-06-05", "2017-06-11"))
+
+state %>%
+  filter(stateregion %like% "US%")
+
+translate_sql(stateregion %like% "US%")
+
+
+# Print data (generates SQL and requests data from database)
+AdvA_Count
+AdvA_06050607
+
+# Collect data into a dataframe
+AdvA_CountDF <- AdvA_Count %>%
+  collect()
+
+freq <- AdvA_LastWeek %>%
+  group_by(userid) %>%
+  summarise(NbImp=n()) %>%
+  collect()
+
+```
+
+```{r Plot data}
+
+#install.packages("ggplot2")
+#install.packages("scales")
+library(ggplot2)
+library(scales)
+
+freq %>%
+  summarise(n())
+
+freq %>%
+  arrange(desc(nbimp)) %>%
+  head(10)
+
+freq %>%
+  filter(nbimp>300) %>%
+  summarise(n())
+
+freq %>%
+  filter(nbimp<20) %>%
+  ggplot() + 
+  geom_bar(mapping = aes(x = nbimp), fill="blue") +
+  labs(x = "Frequency") +
+  labs(y = "Count") +
+  scale_y_continuous(labels= comma)
+
+```
+

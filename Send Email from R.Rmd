@@ -1,0 +1,40 @@
+---
+title: "Send Email from R"
+author: "Doris Sun"
+date: "1/16/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r send with attachment}
+library(sendmailR)
+
+from <- "RStudio@zadv.com"
+to <- c("dorissun@zadv.com", "MarianneRochet@zadv.com", "NancyCastillo@zadv.com")
+subject <- "Testing from Doris in R"
+body <- "Hi Nancy,
+
+Can you check if you receive this email? This is a test.
+
+Thanks,
+Doris"                     
+mailControl=list(host.name = "zmail.zadv.com", port = 587, user.name = "RStudio@zadv.com", passwd = "Winter2017", ssl=TRUE)
+
+#####send same email with attachment
+
+#needs full path if not in working directory
+attachmentPath <-"/home/dorissun/R/Projects/R-DCM/Personal/Doris/Output/CodyAsk182017ziplist.csv"
+
+#same as attachmentPath if using working directory
+attachmentName <- "ziplist.csv"
+
+#key part for attachments, put the body and the mime_part in a list for msg
+attachmentObject <- mime_part(x=attachmentPath,name=attachmentName)
+bodyWithAttachment <- list(body,attachmentObject)
+
+sendmail(from=from,to=to,subject=subject,msg=bodyWithAttachment,control=mailControl)
+```

@@ -1,0 +1,149 @@
+---
+title: "Social API"
+author: "Doris Sun"
+date: "1/30/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r Youtube API Authentication}
+## Not run: # Replace with your Google Developer API Key: 
+
+my_apiKeyYoutube <- "AIzaSyAtXoZGtuiknSByDYkXCHNfPQ5L1C9aPWU"
+
+apiKeyYoutube <- AuthenticateWithYoutubeAPI(my_apiKeyYoutube)
+## End(Not run)
+
+
+
+## Not run: # Use your own Google Developer API Key here: 
+
+myApiKey <- "AIzaSyAtXoZGtuiknSByDYkXCHNfPQ5L1C9aPWU"
+# Authenticate with the Google API 
+apiKeyYoutube <- AuthenticateWithYoutubeAPI(apiKeyYoutube=myApiKey)
+# Generate a vector of YouTube video IDs to collect data from # (or use the function `GetYoutubeVideoIDs` to automatically # generate from a plain text file of video URLs) 
+
+videoIDs <- c("W2GZFeYGU3s","mL27TAJGlWc")
+# Collect the data using function `CollectDataYoutube` 
+
+#charactervector,specifyingoneormoreYouTubevideoIDs. Forexample,ifthe video URL is ’https://www.youtube.com/watch?v=W2GZFeYGU3s’, then use videoIDs='W2GZFeYGU3s'. Formultiplevideos,thefunctionGetYoutubeVideoIDs can be used to create a vector object suitable as input for videoIDs.
+
+myYoutubeData <- CollectDataYoutube(videoIDs,apiKeyYoutube,writeToFile=FALSE)
+# Create an 'actor' network using the function `CreateActorNetwork` 
+g_actor_youtube <- CreateActorNetwork(myYoutubeData)
+## End(Not run)
+
+write.csv(myYoutubeData, "/home/dorissun/R/Projects/R-DCM/Personal/Doris/Social API/Outputs/myYoutubeData.csv",  row.names=F)
+
+```
+
+
+```{r Facebook API Authentication}
+
+#Work on local
+#http://thinktostart.com/analyzing-facebook-with-r/
+
+require(devtools)
+
+install_github("Rfacebook", "pablobarbera", subdir="Rfacebook")
+
+require (Rfacebook)
+
+require(SocialMediaLab)
+
+myAppID <- "2095946747300580" 
+myAppSecret <- "de810d5dfda708bf958dc4209d0a98e8"
+# Authenticate with the Facebook API using `AuthenticateWithFacebookAPI` 
+
+fb_oauth <- SocialMediaLab::AuthenticateWithFacebookAPI(appID=myAppID, appSecret=myAppSecret, extended_permissions=FALSE, useCachedToken=TRUE)
+## End(Not run)
+
+
+save(fb_oauth, file="fb_oauth")
+
+load("fb_oauth")
+
+
+appID <- "2095946747300580" 
+appSecret <- "de810d5dfda708bf958dc4209d0a98e8"
+
+## Collect data and create bimodal network
+g_bimodal_facebook_star_wars <- Authenticate("Facebook", appID = appID, appSecret = appSecret) %>% 
+  SaveCredential("FBCredential.RDS") %>% 
+  Collect(pageName="StarWars", rangeFrom="2015-03-01", rangeTo="2015-03-02", writeToFile=FALSE) %>% 
+  Create("Bimodal")
+
+
+## Create a dynamic network using the saved credentials
+g_bimodal_facebook_star_wars_dynamic <- LoadCredential("FBCredential.RDS") %>% 
+  Collect(pageName="StarWars", rangeFrom="2015-03-01", rangeTo="2015-03-02", writeToFile=FALSE) %>% 
+  Create("dynamic")
+
+```
+
+```{r Instagram API Authentication}
+
+## Use your own values for myAppID and myAppSecret
+app_id <- "ec51a088f8634d7eb7bbf341a0272ff6"
+app_secret <- "970cb2f737b04dccb068fb4b56e54e96"
+# Authenticate with the Instagram API using `AuthenticateWithInstagramAPI`
+instagram_oauth_token <- AuthenticateWithInstagramAPI(appID=app_id, appSecret=app_secret, useCachedToken=FALSE)
+
+# EXAMPLE 1
+# Run the `CollectDataInstagram` function and store the results in variable `myInstagramData` # (searching by hashtag) 
+
+myInstagramData <- CollectDataInstagram(tag="obama", distance=5000, n=100, folder=NULL, verbose=TRUE, waitForRateLimit=TRUE)
+
+# Create a 'bimodal' network using \code{CreateBimodalNetwork}
+
+g_bimodal_instagram_obama <- CreateBimodalNetwork(myInstagramData,writeToFile=F)
+
+# View descriptive information about the bimodal network 
+
+g_bimodal_instagram_obama
+
+
+# EXAMPLE 2
+# Run the `CollectDataInstagram` function and store the results in variable `myInstagramData` # (searching by coordinates in Brisbane (Australia) with a radius of 5km) 
+
+myInstagramData <- CollectDataInstagram(lat=-27.4701, lng=153.0220, distance=5000, n=100, folder=NULL, verbose=TRUE, waitForRateLimit=TRUE)
+# Create a 'bimodal' network using \code{CreateBimodalNetwork} 
+
+g_bimodal_instagram_brisbane <- CreateBimodalNetwork(myInstagramData,writeToFile=F)
+# View descriptive information about the bimodal network 
+
+g_bimodal_instagram_brisbane
+
+
+```
+
+
+```{r Twitter}
+
+
+# Firstly specify your API credentials
+my_api_key <- "gbMTPZhjY8k93IU2RziHH4SmV"
+my_api_secret <- "rRcer0dHdu8PexxnTlRlqjdJ8PYdC5eSjz7FOJOXM5WbjhBrV5"
+my_access_token <- "959517774971396096-uNgoADzeJTXb7HRCqYay8OFcaXJ4Qug"
+my_access_token_secret <- "TjPS3gRdewXTkb6i4JpatE9BtbmxihaDW2ssKHjYffWnP"
+AuthenticateWithTwitterAPI(api_key=my_api_key, api_secret=my_api_secret,
+                           access_token=my_access_token, access_token_secret=my_access_token_secret)
+# Collect tweets data using \code{myTwitterData}
+myTwitterData <- CollectDataTwitter(searchTerm="#auspol",
+                                    numTweets=150,writeToFile=FALSE,verbose=FALSE)
+# Create an 'actor' network using \code{CreateActorNetwork}
+g_actor_twitter <- SocialMediaLab::CreateActorNetwork(myTwitterData)
+# Create a 'bimodal' network using \code{CreateBimodalNetwork}
+g_bimodal_twitter <- SocialMediaLab::CreateBimodalNetwork(myTwitterData)
+# Create a 'semantic' network using \code{CreateSemanticNetwork}
+g_semantic_twitter <- SocialMediaLab::CreateSemanticNetwork(myTwitterData)
+
+
+```
+
+

@@ -1,0 +1,45 @@
+---
+title: "RConnectionToS3Buckets"
+author: "Marianne Rochet"
+date: "6/22/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+https://www.santoshsrinivas.com/accessing-aws-s3-from-r/
+https://github.com/cloudyr/aws.s3#code-examples
+
+
+```{r Connection to S3 Buckets}
+#install.packages("devtools")
+install_github("cloudyr/aws.s3")  
+install.packages("aws.ec2metadata")
+
+library(devtools)  
+library(aws.s3)
+library(aws.ec2metadata)
+
+get_bucket(
+bucket = 'zimmermandata',
+key = 'AKIAI5N3MLGSEE37ILWA',
+secret = '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'
+)
+
+obj <- get_object(
+  object = 'DoubleClick/Final/Activity/dcm_account149404_activity_20170626_20170627_043658_576758817.csv', 
+  bucket = 'zimmermandata', 
+  key = 'AKIAI5N3MLGSEE37ILWA', 
+  secret ='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')
+
+conversion <- read.csv(text = rawToChar(obj), nrows=100000)
+
+conversion <- conversion %>%
+  filter(Advertiser.ID==6417308, Campaign.ID==20011405, !is.na(DBM.Auction.ID))
+
+conversion <- conversion %>%
+  filter(DBM.Advertiser.ID>1)
+
+```
